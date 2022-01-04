@@ -1,10 +1,12 @@
 import torch
 import torch.nn.functional as F
 from torch import nn
+from torch.optim.optimizer import Optimizer
+from torch.utils.data.dataloader import DataLoader
 
 
 class Network(nn.Module):
-    def __init__(self, input_size, output_size, hidden_layers, drop_p=0.5):
+    def __init__(self, input_size: int, output_size: int, hidden_layers: list[int], drop_p: float =0.5) -> None:
         ''' Builds a feedforward network with arbitrary hidden layers.
         
             Arguments
@@ -26,7 +28,7 @@ class Network(nn.Module):
         
         self.dropout = nn.Dropout(p=drop_p)
         
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         ''' Forward pass through the network, returns the output logits '''
         
         for each in self.hidden_layers:
@@ -37,7 +39,7 @@ class Network(nn.Module):
         return F.log_softmax(x, dim=1)
 
 
-def validation(model, testloader, criterion):
+def validation(model: nn.Module, testloader: DataLoader, criterion: nn.Module) -> tuple[float, float]:
     accuracy = 0
     test_loss = 0
     for images, labels in testloader:
@@ -58,7 +60,7 @@ def validation(model, testloader, criterion):
     return test_loss, accuracy
 
 
-def train(model, trainloader, testloader, criterion, optimizer=None, epochs=5, print_every=40):
+def train(model: nn.Module, trainloader: DataLoader, testloader: DataLoader, criterion: nn.Module, optimizer: Optimizer =None, epochs: int =5, print_every: int =40) -> None:
     if optimizer is None:
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
     steps = 0
