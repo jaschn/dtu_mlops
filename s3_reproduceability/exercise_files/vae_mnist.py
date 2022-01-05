@@ -15,7 +15,7 @@ from model import Encoder, Decoder, Model
 import hydra
 import logging
 
-@hydra.main(config_name = "config")
+@hydra.main(config_path=".", config_name = "config")
 def main(cfg):
     # Model Hyperparameters
     dataset_path = cfg.hyperparameters.dataset_path
