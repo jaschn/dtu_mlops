@@ -6,6 +6,7 @@ A simple implementation of Gaussian MLP Encoder and Decoder trained on MNIST
 """
 import torch
 import torch.nn as nn
+from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 from torchvision.datasets import MNIST
@@ -24,10 +25,23 @@ epochs = 5
 
 
 # Data loading
-mnist_transform = transforms.Compose([transforms.ToTensor()])
 
-train_dataset = MNIST(dataset_path, transform=mnist_transform, train=True, download=True)
-test_dataset  = MNIST(dataset_path, transform=mnist_transform, train=False, download=True)
+#store the MNIST dataset in memory as tensors to avoid doing the transform to tensor in every epoch
+class MNIST_cache(Dataset):
+    def __init__(self, train) -> None:
+        super().__init__()
+        mnist_transform = transforms.Compose([transforms.ToTensor()])
+        dataset  = MNIST(dataset_path, transform=mnist_transform, train=train, download=True)
+        self.data = [data for data in dataset]
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, index):
+        return self.data[index]
+    
+train_dataset = MNIST_cache(train=True)
+test_dataset  = MNIST_cache(train=False)
 
 train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
 test_loader  = DataLoader(dataset=test_dataset,  batch_size=batch_size, shuffle=False)
