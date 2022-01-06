@@ -11,10 +11,11 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 from torch.optim import Adam
 from torchvision.datasets import MNIST
-from torchvision.utils import save_image
+from torchvision.utils import save_image, make_grid
 from torch.profiler import profile, record_function, ProfilerActivity
 from torch.profiler.profiler import tensorboard_trace_handler
-
+import wandb
+from PIL import Image
 
 # Model Hyperparameters
 dataset_path = 'datasets'
@@ -26,6 +27,7 @@ hidden_dim = 400
 latent_dim = 20
 lr = 1e-3
 epochs = 5
+wandb.init(project="my-test-project", entity="j12")
 
 
 # Data loading
@@ -112,12 +114,13 @@ encoder = Encoder(input_dim=x_dim, hidden_dim=hidden_dim, latent_dim=latent_dim)
 decoder = Decoder(latent_dim=latent_dim, hidden_dim = hidden_dim, output_dim = x_dim)
 
 model = Model(Encoder=encoder, Decoder=decoder).to(DEVICE)
+wandb.watch(model)
 
 BCE_loss = nn.BCELoss()
 
 optimizer = Adam(model.parameters(), lr=lr)
 
-with profile(activities=[ProfilerActivity.CPU], schedule=torch.profiler.schedule(wait=0,warmup=0,active=100), on_trace_ready=tensorboard_trace_handler("./tb")) as prof:
+with profile(activities=[ProfilerActivity.CPU], schedule=torch.profiler.schedule(wait=0,warmup=0,active=epochs), on_trace_ready=tensorboard_trace_handler("./tb")) as prof:
     with record_function("trainig"):
         print("Start training VAE...")
         model.train()
@@ -137,6 +140,7 @@ with profile(activities=[ProfilerActivity.CPU], schedule=torch.profiler.schedule
                 loss.backward()
                 optimizer.step()
             prof.step()
+            wandb.log({f"loss": overall_loss / (batch_idx*batch_size)})
             print("\tEpoch", epoch + 1, "complete!", "\tAverage Loss: ", overall_loss / (batch_idx*batch_size))    
         print("Finish!!")
 
@@ -149,12 +153,28 @@ with torch.no_grad():
         x_hat, _, _ = model(x)       
         break
 
-save_image(x.view(batch_size, 1, 28, 28), 'orig_data.png')
-save_image(x_hat.view(batch_size, 1, 28, 28), 'reconstructions.png')
+grid = make_grid(x.view(batch_size, 1, 28, 28), nrow=8, padding=2, pad_value=0,
+                    normalize=False, range=None, scale_each=False)
+# Add 0.5 after unnormalizing to [0, 255] to round to nearest integer
+ndarr = grid.mul_(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to('cpu', torch.uint8).numpy()
+im = Image.fromarray(ndarr)
+wandb.log({"orig_data": wandb.Image(im)})
+
+grid = make_grid(x_hat.view(batch_size, 1, 28, 28), nrow=8, padding=2, pad_value=0,
+                    normalize=False, range=None, scale_each=False)
+# Add 0.5 after unnormalizing to [0, 255] to round to nearest integer
+ndarr = grid.mul_(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to('cpu', torch.uint8).numpy()
+im = Image.fromarray(ndarr)
+wandb.log({"reconstruction": wandb.Image(im)})
 
 # Generate samples
 with torch.no_grad():
     noise = torch.randn(batch_size, latent_dim).to(DEVICE)
     generated_images = decoder(noise)
     
-save_image(generated_images.view(batch_size, 1, 28, 28), 'generated_sample.png')
+grid = make_grid(generated_images.view(batch_size, 1, 28, 28), nrow=8, padding=2, pad_value=0,
+                    normalize=False, range=None, scale_each=False)
+# Add 0.5 after unnormalizing to [0, 255] to round to nearest integer
+ndarr = grid.mul_(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to('cpu', torch.uint8).numpy()
+im = Image.fromarray(ndarr)
+wandb.log({"generated images": wandb.Image(im)})
