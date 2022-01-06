@@ -9,8 +9,12 @@ import torch.nn as nn
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
+from torch.optim import Adam
 from torchvision.datasets import MNIST
 from torchvision.utils import save_image
+from torch.profiler import profile, record_function, ProfilerActivity
+from torch.profiler.profiler import tensorboard_trace_handler
+
 
 # Model Hyperparameters
 dataset_path = 'datasets'
@@ -40,11 +44,6 @@ class MNIST_cache(Dataset):
     def __getitem__(self, index):
         return self.data[index]
     
-train_dataset = MNIST_cache(train=True)
-test_dataset  = MNIST_cache(train=False)
-
-train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
-test_loader  = DataLoader(dataset=test_dataset,  batch_size=batch_size, shuffle=False)
 
 class Encoder(nn.Module):  
     def __init__(self, input_dim, hidden_dim, latent_dim):
@@ -95,15 +94,6 @@ class Model(nn.Module):
         x_hat            = self.Decoder(z)
         
         return x_hat, mean, log_var
-    
-encoder = Encoder(input_dim=x_dim, hidden_dim=hidden_dim, latent_dim=latent_dim)
-decoder = Decoder(latent_dim=latent_dim, hidden_dim = hidden_dim, output_dim = x_dim)
-
-model = Model(Encoder=encoder, Decoder=decoder).to(DEVICE)
-
-from torch.optim import Adam
-
-BCE_loss = nn.BCELoss()
 
 def loss_function(x, x_hat, mean, log_var):
     reproduction_loss = nn.functional.binary_cross_entropy(x_hat, x, reduction='sum')
@@ -111,28 +101,44 @@ def loss_function(x, x_hat, mean, log_var):
 
     return reproduction_loss + KLD
 
+
+train_dataset = MNIST_cache(train=True)
+test_dataset  = MNIST_cache(train=False)
+
+train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
+test_loader  = DataLoader(dataset=test_dataset,  batch_size=batch_size, shuffle=False)
+
+encoder = Encoder(input_dim=x_dim, hidden_dim=hidden_dim, latent_dim=latent_dim)
+decoder = Decoder(latent_dim=latent_dim, hidden_dim = hidden_dim, output_dim = x_dim)
+
+model = Model(Encoder=encoder, Decoder=decoder).to(DEVICE)
+
+BCE_loss = nn.BCELoss()
+
 optimizer = Adam(model.parameters(), lr=lr)
 
+with profile(activities=[ProfilerActivity.CPU], schedule=torch.profiler.schedule(wait=0,warmup=0,active=100), on_trace_ready=tensorboard_trace_handler("./tb")) as prof:
+    with record_function("trainig"):
+        print("Start training VAE...")
+        model.train()
+        for epoch in range(epochs):
+            overall_loss = 0
+            for batch_idx, (x, _) in enumerate(train_loader):
+                x = x.view(batch_size, x_dim)
+                x = x.to(DEVICE)
 
-print("Start training VAE...")
-model.train()
-for epoch in range(epochs):
-    overall_loss = 0
-    for batch_idx, (x, _) in enumerate(train_loader):
-        x = x.view(batch_size, x_dim)
-        x = x.to(DEVICE)
+                optimizer.zero_grad()
 
-        optimizer.zero_grad()
-
-        x_hat, mean, log_var = model(x)
-        loss = loss_function(x, x_hat, mean, log_var)
-        
-        overall_loss += loss.item()
-        
-        loss.backward()
-        optimizer.step()
-    print("\tEpoch", epoch + 1, "complete!", "\tAverage Loss: ", overall_loss / (batch_idx*batch_size))    
-print("Finish!!")
+                x_hat, mean, log_var = model(x)
+                loss = loss_function(x, x_hat, mean, log_var)
+                
+                overall_loss += loss.item()
+                
+                loss.backward()
+                optimizer.step()
+            prof.step()
+            print("\tEpoch", epoch + 1, "complete!", "\tAverage Loss: ", overall_loss / (batch_idx*batch_size))    
+        print("Finish!!")
 
 # Generate reconstructions
 model.eval()
