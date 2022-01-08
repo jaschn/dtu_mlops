@@ -120,6 +120,12 @@ BCE_loss = nn.BCELoss()
 
 optimizer = Adam(model.parameters(), lr=lr)
 
+wandb.config = {
+  "learning_rate": lr,
+  "epochs": epochs,
+  "batch_size": batch_size
+}
+
 with profile(activities=[ProfilerActivity.CPU], schedule=torch.profiler.schedule(wait=0,warmup=0,active=epochs), on_trace_ready=tensorboard_trace_handler("./tb")) as prof:
     with record_function("trainig"):
         print("Start training VAE...")
@@ -141,7 +147,7 @@ with profile(activities=[ProfilerActivity.CPU], schedule=torch.profiler.schedule
                 optimizer.step()
             prof.step()
             wandb.log({f"loss": overall_loss / (batch_idx*batch_size)})
-            print("\tEpoch", epoch + 1, "complete!", "\tAverage Loss: ", overall_loss / (batch_idx*batch_size))    
+            print("\tEpoch", epoch + 1, "complete!", "\tAverage Loss: ", overall_loss / (batch_idx*batch_size))
         print("Finish!!")
 
 # Generate reconstructions
