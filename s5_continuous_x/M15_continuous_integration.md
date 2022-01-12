@@ -1,11 +1,11 @@
 ---
 layout: default
-title: M15 - Continues Integration
+title: M15 - Continuous Integration
 parent: S5 - Continuous X
 nav_order: 1
 ---
 
-# Continues Integration
+# Continuous Integration
 {: .no_toc }
 
 <details open markdown="block">
@@ -19,7 +19,7 @@ nav_order: 1
 
 ---
 
-Continues integration (CI) is a development practice that makes sure that updates to code are 
+Continuous integration (CI) is a development practice that makes sure that updates to code are
 automatically tested such that it does not break existing code. If you look at the MLOps pipeline, 
 CI is one of cornerstones of operations part. However, it should be notes that applying CI does 
 not magically secure that your code does not break. CI is only as strong as the tests that are 
@@ -41,8 +41,8 @@ automatically executed. CI simply structures and automates this.
 
 ## Pytest
 
-The first part of continues integration is writing tests. It is both a hard and tedious task to do but
-arguable the most important aspects of continues integration. Python offers a couple of different libraries
+The first part of continuous integration is writing tests. It is both a hard and tedious task to do but
+arguable the most important aspects of continuous integration. Python offers a couple of different libraries
 for writing tests. We are going to use `pytest`.
 
 ### Exercises
@@ -63,21 +63,36 @@ The following exercises should be applied to your MNIST repository
    
 4. Write some tests. Below are some guidelines on some tests that should be implemented, but
    you are of course free to implement more tests. You can at any point check if your tests are
-   passing by typing in a terminal
-   
+   passing by typing in a terminal   
    ```
    pytest tests/
    ```
 
-   1. Data testing: In a file called `tests/test_data.py` implement at least a
-      test that checks that data gets correctly loaded. By this we mean that you should check
+   1. Start by creating a `tests/__init__.py` file and fill in the following:
+      ```python
+      import os
+      _TEST_ROOT = os.path.dirname(__file__)  # root of test folder
+      _PROJECT_ROOT = os.path.dirname(_TEST_ROOT)  # root of project
+      _PATH_DATA = os.path.join(_PROJECT_ROOT, "Data")  # root of data
+      ```
+      these can help you refer to your data files during testing. For example, in another test
+      file I could write 
+      ```python
+      from tests import _PATH_DATA
+      ```
+      which then contains the root path to my data.
 
+   2. Data testing: In a file called `tests/test_data.py` implement at least a
+      test that checks that data gets correctly loaded. By this we mean that you should check
       ```python
       dataset = MNIST(...)
-      assert len(dataset) == 60000 for training and 10000 for test
+      assert len(dataset) == N_train for training and N_test for test
       assert that each datapoint has shape [1,28,28] or [728] depending on how you choose to format
       assert that all labels are represented
       ```
+      where `N_train` should be either 25000 or 40000 depending on if you are just the first
+      subset of the corrupted Mnist data or also including the second subset. `N_test` should 
+      be 5000.
 
    3. Model testing: In a file called `tests/test_model.py` implement at least a test that
       checks for a given input with shape *X* that the output of the model have shape *Y*
@@ -87,28 +102,48 @@ The following exercises should be applied to your MNIST repository
       what should be tested, but try to test something the risk being broken when developing the code.
         
    5. Good code raises errors and give out warnings in appropriate places. This is often in  
-      the case of some  invalid combination of input to your script. For example, you model 
+      the case of some invalid combination of input to your script. For example, you model 
       could check for the size of the input given to it (see code below) to make sure it corresponds 
-      to what you are expecting. Not implementing  such errors would still result in Pytorch failing 
+      to what you are expecting. Not implementing such errors would still result in Pytorch failing 
       at a later point due to shape errors, however these custom errors will probably make more sense 
       to the end user. Implement at least one raised error or warning somewhere in your code and 
       use either `pytest.raises` or `pytest.warns` to check that they are correctly raised/warned.
-
+      As inspiration, the following implements `ValueError` in code belonging to the model:
       ```python
+      # src/models/model.py
       def forward(self, x: Tensor):
          if x.ndim != 4:
             raise ValueError('Expected input to a 4D tensor')
-         if x.shape[1] != 1 or x.shape[2] != 28 or x.shape[3]
+         if x.shape[1] != 1 or x.shape[2] != 28 or x.shape[3] != 28:
             raise ValueError('Expected each sample to have shape [1, 28, 28]')
+      ```
+      which would be captured by a test looking something like this:
+      ```python
+      # tests/test_model.py
+      def test_error_on_wrong_shape():
+         with pytest.raises(ValueError, match='Expected input to a 4D tensor')
+            model(torch.randn(1,2,3))
       ```
 
    6. A test is only as good as the error message it gives, and by default `assert`
       will only report that the check failed. However, we can help our self and others by adding 
       strings after `assert` like
       ```python
-      assert len(train_dataset) == 60000, "Dataset did not have the correct number of samples"
+      assert len(train_dataset) == N_train, "Dataset did not have the correct number of samples"
       ```
       Add such comments to the assert statements you just did.
+
+   7. The tests that involve checking anything that have to do with our data, will of cause fail
+      if the data is not present. To future proof our code, we can take advantage of the
+      `pytest.mark.skipif` decorator. Use this decorator to skip your data tests if the corresponding
+      data files does not exist. It should look something like this
+      ```python
+      import os.path
+      @pytest.mark.skipif(not os.path.exists(file_path), reason="Data files not found")
+      def test_something_about_data():
+         ...
+      ```
+      You can read more about skipping tests [here](https://docs.pytest.org/en/latest/how-to/skipping.html)
 
 5. After writing the different tests, make sure that they are passing locally.
 
@@ -172,7 +207,8 @@ Lets take a look at how a github workflow file is organized:
   run when the workflow is executed.
 
 <p align="center">
-  <img src="../figures/actions.png" width="1000" title="credits to https://madewithml.com/courses/mlops/cicd/#github-actions">
+  <img src="../figures/actions.png" width="1000" 
+  title="credits to https://madewithml.com/courses/mlops/cicd/#github-actions">
 </p>
 
 ### Exercises
